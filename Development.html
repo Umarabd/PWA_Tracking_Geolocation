@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Realtime location tracker</title>
+
+    <!-- leaflet css  -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
+    />
+    <link rel="manifest" href="manifest.json" />
+
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      #map {
+        width: 100%;
+        height: 100vh;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="map"></div>
+  </body>
+  <script>
+    window.addEventListener("load", () => {
+      registerSW();
+    });
+
+    // Register the Service Worker
+    async function registerSW() {
+      if ("serviceWorker" in navigator) {
+        try {
+          await navigator.serviceWorker.register("serviceworker.js");
+        } catch (e) {
+          console.log("SW registration failed");
+        }
+      }
+    }
+  </script>
+</html>
+
+<!-- leaflet js  -->
+<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+
+<script>
+  // Map initialization
+  var map = L.map("map").setView([14.0860746, 100.608406], 6);
+
+  //osm layer
+  var osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  });
+  osm.addTo(map);
+
+  if (!navigator.geolocation) {
+    console.log("Your browser doesn't support geolocation feature!");
+  } else {
+    setInterval(() => {
+      navigator.geolocation.getCurrentPosition(getPosition);
+    }, 5000);
+  }
+
+  var marker, circleAccuracy, circle;
+
+  const warungMakan = {
+    id: "Warung Makan",
+    latitude: -6.2942991,
+    longitude: 106.8259044,
+  };
+
+  console.log(warungMakan.latitude);
+  function getPosition(position) {
+    console.log(position.timestamp);
+    var lat = position.coords.latitude;
+    var long = position.coords.longitude;
+    var accuracy = position.coords.accuracy;
+    var time = position.timestamp;
+    console.log(position);
+    if (marker) {
+      map.removeLayer(marker);
+    }
+
+    if (circleAccuracy) {
+      map.removeLayer(circleAccuracy);
+    }
+
+    marker = L.marker([lat, long]);
+    circleAccuracy = L.circle([lat, long], {
+      radius: position.coords.accuracy,
+    });
+    waktu = position.timestamp;
+    var featureGroup = L.featureGroup([marker, circleAccuracy])
+      .addTo(map)
+      .bindPopup(
+        "Longitude: " +
+          String(position.coords.longitude) +
+          "<br> " +
+          "Latitude: " +
+          String(position.coords.latitude) +
+          "<br> " +
+          "Time :" +
+          String(waktu)
+      )
+      .openPopup();
+
+    map.fitBounds(featureGroup.getBounds());
+
+    console.log(
+      "Your coordinate is: Lat: " +
+        lat +
+        " Long: " +
+        long +
+        " Accuracy: " +
+        accuracy +
+        " Timestamp: " +
+        waktu
+    );
+
+    var positionNow = L.latLng(lat, long);
+    var positionWarung = L.latLng(warungMakan.latitude, warungMakan.longitude);
+    let distance = positionNow.distanceTo(positionWarung);
+
+    console.log("Jaraknya: " + distance);
+
+    if (distance < 100) {
+      console.warn("Jaraknya Udah Deket WOI Sekitar " + distance + "m lagi");
+    } else {
+      console.warn("Jaraknya Masih Jauh kira-kira " + distance + " m lagi");
+    }
+
+    if (navigator.onLine) {
+      axios
+        .post("https://api.gisportal.id/test", {
+          longitude: long,
+          latitude: lat,
+          timestamp: waktu,
+        })
+        .then(function (response) {
+          console.log(response);
+        })
+        .catch(function (error) {
+          console.log(error);
+        });
+      console.log("Data di kirim secara online");
+    } else {
+      console.log(
+        "Lagi Mode offline nih " + "\n" + "TimeStamp:" + position.timestamp
+      );
+
+      const indexedDB =
+        window.indexedDB ||
+        window.mozIndexedDB ||
+        window.webkitIndexedDB ||
+        window.msIndexedDB ||
+        window.shimIndexedDB;
+
+      if (!indexedDB) {
+        console.log("IndexedDB could not be found in this browser.");
+      }
+
+      // 2
+      const request = indexedDB.open("LocationOffline", 1);
+
+      request.onerror = function (event) {
+        console.error("An error occurred with IndexedDB");
+        console.error(event);
+      };
+      request.onupgradeneeded = function () {
+        //1
+        const db = request.result;
+
+        //2
+        const store = db.createObjectStore("location", {
+          keyPath: "Timestamp",
+        });
+
+        //3
+        //   store.createIndex("cars_colour", ["colour"], { unique: false });
+
+        //   // 4
+        //   store.createIndex("colour_and_make", ["colour", "make"], {
+        //     unique: false,
+        //   });
+      };
+      request.onsuccess = function () {
+        console.log("Database indexeddb opened successfully");
+
+        const db = request.result;
+
+        // 1
+        const transaction = db.transaction("location", "readwrite");
+
+        //2
+        const store = transaction.objectStore("location");
+
+        //3
+        store.put({
+          Longitude: position.coords.longitude,
+          Latitude: position.coords.latitude,
+          Timestamp: position.timestamp,
+        });
+
+        // 6
+        transaction.oncomplete = function () {
+          console.log("Data Tersimpan di IndexedDB");
+          db.close();
+        };
+      };
+    }
+  }
+</script>

@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Realtime location tracker</title>
+
+    <!-- leaflet css  -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
+    />
+    <link rel="manifest" href="manifest.json" />
+
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      #map {
+        width: 100%;
+        height: 100vh;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="map"></div>
+  </body>
+  <script>
+    window.addEventListener("load", () => {
+      registerSW();
+    });
+
+    // Register the Service Worker
+    async function registerSW() {
+      if ("serviceWorker" in navigator) {
+        try {
+          await navigator.serviceWorker.register("serviceworker.js");
+        } catch (e) {
+          console.log("SW registration failed");
+        }
+      }
+    }
+  </script>
+</html>
+
+<!-- leaflet js  -->
+<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script src="leaflet.rotatedMarker.js"></script>
+<script src="https://momentjs.com/downloads/moment.js"></script>
+<script>
+  // Map initialization
+  var map = L.map("map").setView([14.0860746, 100.608406], 6);
+
+  //osm layer
+  var osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  });
+  osm.addTo(map);
+
+  if (!navigator.geolocation) {
+    console.log("Your browser doesn't support geolocation feature!");
+  } else {
+    setInterval(() => {
+      navigator.geolocation.getCurrentPosition(getPosition);
+    }, 6000);
+  }
+
+  var marker, circleAccuracy, circle;
+
+  const warungMakan = {
+    id: "Warung Makan",
+    latitude: -6.2942991,
+    longitude: 106.8259044,
+  };
+  console.log(warungMakan.latitude);
+  var arrowIcon = L.icon({
+    iconUrl:
+      "https://development.gisportal.id/portal/sharing/rest/content/items/e08a6c3cd3f14aa39a66248d5ea30c18/data",
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
+  const request = indexedDB.open("LocationOffline", 1);
+
+  function viewNotes() {
+    const request = indexedDB.open("LocationOffline", 1);
+    request.onerror = function (event) {
+      console.error("An error occurred with IndexedDB");
+      console.error(event);
+    };
+    request.onupgradeneeded = function () {
+      //1
+      const db = request.result;
+
+      //2
+      const store = db.createObjectStore("location", {
+        keyPath: "Timestamp",
+      });
+
+      //3
+      //   store.createIndex("cars_colour", ["colour"], { unique: false });
+
+      //   // 4
+      //   store.createIndex("colour_and_make", ["colour", "make"], {
+      //     unique: false,
+      //   });
+    };
+    request.onsuccess = function () {
+      console.log("Database indexeddb opened successfully");
+
+      const db = request.result;
+
+      // 1
+      const transaction = db.transaction("location", "readonly");
+
+      //2
+      const store = db.objectStore("location");
+
+      const open = store.openCursor();
+
+      open.onsuccess = (e) => {
+        const cursor = e.target.result;
+        cursor.continue();
+      };
+    };
+  }
+
+  function getPosition(position) {
+    console.log(position.timestamp);
+    var lat = position.coords.latitude;
+    var long = position.coords.longitude;
+    var accuracy = position.coords.accuracy;
+    var time = position.timestamp;
+    console.log(position);
+    if (marker) {
+      map.removeLayer(marker);
+    }
+
+    if (circleAccuracy) {
+      map.removeLayer(circleAccuracy);
+    }
+
+    marker = L.marker(
+      [lat, long],
+      {
+        icon: arrowIcon,
+      },
+      { rotationOrigin: 45 }
+    );
+    circleAccuracy = L.circle([lat, long], {
+      radius: position.coords.accuracy,
+    });
+    waktu = new Date(time).toLocaleString("en-US");
+    var featureGroup = L.featureGroup([marker, circleAccuracy])
+      .addTo(map)
+      .bindPopup(
+        "Longitude: " +
+          String(position.coords.longitude) +
+          "<br> " +
+          "Latitude: " +
+          String(position.coords.latitude) +
+          "<br> " +
+          "Time :" +
+          String(time) +
+          "<br> " +
+          "Heading: " +
+          String(position.coords.heading) +
+          "<br> " +
+          "Speed: " +
+          String(position.coords.speed)
+      )
+      .openPopup();
+
+    map.fitBounds(featureGroup.getBounds());
+
+    console.log(
+      "Your coordinate is: Lat: " +
+        lat +
+        " Long: " +
+        long +
+        " Accuracy: " +
+        accuracy +
+        " Timestamp: " +
+        waktu
+    );
+
+    var positionNow = L.latLng(lat, long);
+    var positionWarung = L.latLng(warungMakan.latitude, warungMakan.longitude);
+    let distance = positionNow.distanceTo(positionWarung);
+
+    console.log("Jaraknya: " + distance);
+    if (distance < 100) {
+      console.warn("Jaraknya Udah Deket WOI Sekitar " + distance + "m lagi");
+    } else {
+      console.warn("Jaraknya Masih Jauh kira-kira " + distance + " m lagi");
+    }
+    if (navigator.onLine) {
+      axios
+        .post("http://api.gisportal.id/geoevent/rest/receiver/JSON_REST_API", {
+          name: "TEST PWAAA",
+          id: time,
+          longitude: long,
+          latitude: lat,
+        })
+        .then(function (response) {
+          console.log(response);
+        })
+        .catch(function (error) {
+          console.log(error);
+        });
+      console.log("Data di kirim secara online");
+
+      function populateArray(openDatabaseHandle, onCompleteCallbackFunction) {
+        var transaction = openDatabaseHandle.transaction("location");
+        var store = transaction.objectStore("location");
+        var myArray = [];
+        var request = store.openCursor();
+        request.onsuccess = function () {
+          var cursor = this.result;
+          if (!cursor) return;
+          myArray.push(cursor.value);
+          cursor.continue();
+        };
+        transaction.oncomplete = function () {
+          onCompleteCallbackFunction(myArray);
+        };
+      }
+
+      // An example of calling the above function
+      var conn = indexedDB.open("LocationOffline", 1);
+      conn.onsuccess = function () {
+        populateArray(this.result, onPopulated);
+      };
+
+      // An example of a callback function that can be passed to
+      // the populateArray function above
+      function onPopulated(data) {
+        console.log(data);
+        data.forEach(function (obj) {
+          axios.post(
+            "http://api.gisportal.id/geoevent/rest/receiver/JSON_REST_API",
+            {
+              name: "Data Dari IndexedDB",
+              id: obj.Timestamp,
+              longitude: obj.Longitude,
+              latitude: obj.Latitude,
+              timestamp: new Date(),
+            }
+          );
+
+          console.log("Object: %o", obj.Timestamp);
+        });
+      }
+      function dropTable() {
+        const request = indexedDB.open("LocationOffline", 1);
+        const objectStore = request
+          .transaction("location", "readwrite")
+          .objectStore("location");
+        const objectStoreRequest = objectStore.clear();
+        objectStoreRequest.onsuccess = function (event) {
+          console.log("Erase of database completed.");
+        };
+      }
+      dropTable();
+    } else {
+      console.log(
+        "Lagi Mode offline nih " + "\n" + "TimeStamp:" + position.timestamp
+      );
+
+      const indexedDB =
+        window.indexedDB ||
+        window.mozIndexedDB ||
+        window.webkitIndexedDB ||
+        window.msIndexedDB ||
+        window.shimIndexedDB;
+
+      if (!indexedDB) {
+        console.log("IndexedDB could not be found in this browser.");
+      }
+
+      // 2
+      const request = indexedDB.open("LocationOffline", 1);
+
+      request.onerror = function (event) {
+        console.error("An error occurred with IndexedDB");
+        console.error(event);
+      };
+      request.onupgradeneeded = function () {
+        //1
+        const db = request.result;
+
+        //2
+        const store = db.createObjectStore("location", {
+          keyPath: "Timestamp",
+        });
+
+        //3
+        //   store.createIndex("cars_colour", ["colour"], { unique: false });
+
+        //   // 4
+        //   store.createIndex("colour_and_make", ["colour", "make"], {
+        //     unique: false,
+        //   });
+      };
+      request.onsuccess = function () {
+        console.log("Database indexeddb opened successfully");
+
+        const db = request.result;
+
+        // 1
+        const transaction = db.transaction("location", "readwrite");
+
+        //2
+        const store = transaction.objectStore("location");
+
+        //3
+        store.put({
+          Longitude: position.coords.longitude,
+          Latitude: position.coords.latitude,
+          Timestamp: position.timestamp,
+        });
+
+        // 6
+        transaction.oncomplete = function () {
+          console.log("Data Tersimpan di IndexedDB");
+          db.close();
+        };
+      };
+    }
+  }
+</script>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Latihan IndexedDB</title>
+  </head>
+  <body></body>
+  <script>
+    const indexedDB =
+      window.indexedDB ||
+      window.mozIndexedDB ||
+      window.webkitIndexedDB ||
+      window.msIndexedDB ||
+      window.shimIndexedDB;
+
+    if (!indexedDB) {
+      console.log("IndexedDB could not be found in this browser.");
+    }
+
+    // 2
+    const request = indexedDB.open("CarsDatabase", 1);
+
+    request.onerror = function (event) {
+      console.error("An error occurred with IndexedDB");
+      console.error(event);
+    };
+    request.onupgradeneeded = function () {
+      //1
+      const db = request.result;
+
+      //2
+      const store = db.createObjectStore("cars", { keyPath: "id" });
+
+      //3
+      //   store.createIndex("cars_colour", ["colour"], { unique: false });
+
+      //   // 4
+      //   store.createIndex("colour_and_make", ["colour", "make"], {
+      //     unique: false,
+      //   });
+    };
+    request.onsuccess = function () {
+      console.log("Database indexeddb opened successfully");
+
+      const db = request.result;
+      // // 1
+      const transaction = db.transaction("cars", "readwrite");
+
+      // //2
+      const store = transaction.objectStore("cars");
+
+      // //3
+      // // store.put({ id: 1, colour: "Red", make: "Toyota" });
+      // // store.put({ id: 2, colour: "Red", make: "Kia" });
+      // // store.put({ id: 3, colour: "Blue", make: "Honda" });
+      // // store.put({ id: 4, colour: "Silver", make: "Subaru" });
+
+      // // // 6
+      // // transaction.oncomplete = function () {
+      // //   console.log("Data Tersimpan di IndexedDB");
+      // //   db.close();
+      // // };
+      // const call = store.get(4); /* or getAllKeys() */
+      const getData = (store.get("1").onsuccess = function (event) {
+        var customerData = event.target.result;
+        var data = customerData.data;
+        console.log(data);
+      });
+    };
+  </script>
+  <script></script>
+</html>
